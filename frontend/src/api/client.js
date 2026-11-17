@@ -5,4 +5,5 @@ export async function api(path,options={}) {
  return res.json();
 }
 export const post=(path,data)=>api(path,{method:'POST',body:JSON.stringify(data)});
-export async function download(id){const r=await fetch(`/api/reviews/${id}/export`,{headers:{Authorization:'Bearer '+localStorage.getItem('mill-token')}});if(!r.ok)throw Error('报告尚不可导出');const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download=`mill-yield-review-${id}.csv`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}
+export async function downloadFile(path,name){const r=await fetch('/api'+path,{headers:{Authorization:'Bearer '+localStorage.getItem('mill-token')}});if(!r.ok){let d=await r.json().catch(()=>({}));throw Error(typeof d.detail==='string'?d.detail:'报告尚不可导出');}const a=document.createElement('a');a.href=URL.createObjectURL(await r.blob());a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),5000);}
+export const download=id=>downloadFile(`/reviews/${id}/export`,`mill-yield-review-${id}.csv`);

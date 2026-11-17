@@ -15,11 +15,17 @@ def current(request:Request,cred:HTTPAuthorizationCredentials=Depends(bearer),db
     except Exception:raise HTTPException(401,'登录已过期，请重新登录')
     request.state.actor=u.email
     return u
-def writable(u=Depends(current)):
-    if u.role not in ('admin','analyst'):raise HTTPException(403,'观察员只可读取，无法写入或提交计算')
+def staff(u=Depends(current)):
+    if u.role=='external':raise HTTPException(403,'外检账号仅可访问分配的盲样任务')
     return u
-def admin(u=Depends(current)):
-    if u.role!='admin':raise HTTPException(403,'复核签核仅限质量负责人')
+def writable(u=Depends(staff)):
+    if u.role not in ('admin','analyst'):raise HTTPException(403,'当前角色只可读取，无法写入或提交计算')
+    return u
+def admin(u=Depends(staff)):
+    if u.role!='admin':raise HTTPException(403,'该操作仅限质量负责人')
+    return u
+def external(u=Depends(current)):
+    if u.role!='external':raise HTTPException(403,'盲样回填仅限外检账号')
     return u
 def login(db,data):
     u=db.scalar(select(User).where(User.email==data.email))

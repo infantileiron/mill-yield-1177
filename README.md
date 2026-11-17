@@ -10,7 +10,8 @@
 - 检验录入：出粉率、水分、检验员，范围校验和重复编号阻断。
 - 分布诊断：按产线冻结快照，Redis 排队由独立 Python worker 计算，显示完整样本直方图、分位数、IQR 异常点和分组均值。
 - 复核报告：负责人签核意见，分析员与观察员可下载含原始样本的 CSV。
-- JWT 三角色、写操作审计、每分钟请求限流、可恢复的错误提示。
+- 盲样比对：负责人选至少 2 条原检验生成送检单，冻结原值与限差并分配匿名码和外检账号；外检回填、异值裁定、齐样揭盲后输出配对统计与超差清单。
+- JWT 四角色、写操作审计、每分钟请求限流、可恢复的错误提示。
 
 ## 账号与权限
 
@@ -18,9 +19,10 @@
 
 | 角色 | 账号 | 权限 | 典型动作 |
 |---|---|---|---|
-| admin | admin@demo.local | 全部业务读写与签核、审计读取 | 核对异常点并签核 |
+| admin | admin@demo.local | 全部业务读写与签核、审计读取、送检单创建/裁定/揭盲 | 核对异常点并签核、揭盲 |
 | analyst | analyst@demo.local | 录入、提交计算、读取和导出；不可签核 | 新增样本并发起复核 |
 | viewer | viewer@demo.local | 只读与导出；后端拒绝业务写入与任务提交 | 下载交班报告 |
+| external | ext1@demo.local / ext2@demo.local | 仅见分配的匿名码并回填出粉率；其余业务接口一律拒绝 | 盲样回填 |
 
 ## 快速启动
 
@@ -65,6 +67,16 @@ docker compose down -v --remove-orphans
 
 后台 worker 从 Redis 消费复核 id，更新 queued→running→completed/failed，写结果至共享 artifacts 卷。重启时会扫描未完成任务并重新排队。负责人仅能签核 completed 状态，签核后不可重复签核。CSV 导出包含状态、口径值、签核意见和所有冻结样本。
 
+## 盲样比对口径
+
+外送复测与库内诊断完全分离：复测值只写入盲样表，不进入检验记录、分布诊断与复核报告。
+
+- 负责人从原检验中勾选至少 2 条生成送检单，创建时冻结原测出粉率与限差，系统为每条样本分配随机匿名码（如 `BM-K7Q2XA`）并指定外检账号。
+- 外检账号登录后仅见分配给自己的匿名码；揭盲前所有查询与 CSV 导出均隐藏批号及原测值（含负责人视图）。
+- 回填按送检单行加锁串行：同码同值重试幂等不新增留痕；异值登记冲突待负责人裁定采用值；已揭盲即停止回填。
+- 缺样或冲突未清时揭盲被 409 阻断；揭盲在事务内读取完整回填结果，任何失败回滚后单据保持封存。
+- 揭盲后按匿名码配对，计算复测减原测的均值与样本标准差（n−1），|差值| 严格大于冻结限差判定超差（边界保留），结果与 SHA-256 一并冻结，依据固定不可改。
+
 ## 一天的工作剧本
 
 1. 08:50 观察员登录查看 `QH-1115-A`，核对 15 个已有样本。
@@ -75,6 +87,9 @@ docker compose down -v --remove-orphans
 6. 09:40 独立 worker 完成计算，分析员核对 IQR 边界和异常样本。
 7. 10:00 负责人切换 admin，记录复测安排并签核。
 8. 10:20 观察员下载 `mill-yield-review-<id>.csv`，交给产线班长。
+9. 10:30 负责人在盲样比对勾选 3 条原检验，限差 ±0.5，分配给 ext1 / ext2 生成送检单。
+10. 10:40 外检 ext1 登录只见匿名码，回填出粉率；同值重试不重复记录，异值报冲突。
+11. 11:00 负责人裁定冲突、确认无缺样后揭盲，查看差值均值、样本标准差与超差清单。
 
 ## 目录与本地开发
 
@@ -82,7 +97,7 @@ docker compose down -v --remove-orphans
 
 本地 Python 开发：安装 `backend/requirements.txt`，配置 `DATABASE_URL` / `REDIS_URL` / `JWT_SECRET`，在 backend 目录执行 `uvicorn src.main:app --reload` 与 `python -m src.worker`。静态前端通过 Nginx `/api/` 代理后端无前缀路由，不需要 Node 构建。
 
-共享枚举：`backend/src/constants/enums.py` 与 `frontend/src/constants/enums.js` 中分别定义角色 Role、复核状态 ReviewStatus、产线 LINES；UI 角色标签、后端鉴权及状态迁移遵守这些值。
+共享枚举：`backend/src/constants/enums.py` 与 `frontend/src/constants/enums.js` 中分别定义角色 Role（含 external 外检）、复核状态 ReviewStatus、送检单状态 BlindOrderStatus（sealed/unblinded）、盲样状态 BlindItemStatus（pending/filled/conflict）、产线 LINES；UI 角色标签、后端鉴权及状态迁移遵守这些值。
 
 ## 范围与已知差异
 

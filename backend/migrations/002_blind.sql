@@ -1,0 +1,10 @@
+-- Schema is applied by SQLAlchemy metadata.create_all at application start.
+-- This migration documents the blind-retest tables added for 盲样比对.
+-- blind_orders: 送检单。tolerance 限差创建时冻结；status sealed→unblinded 单向迁移；
+--   result 保存揭盲时的配对统计（均值/样本标准差/超差清单/SHA-256），揭盲后不可改。
+-- blind_items: (order_id, anon_code) UNIQUE。sample_code/batch_code/original_yield
+--   冻结于创建时，揭盲前不对查询与导出开放；retest_yield 由外检账号回填。
+-- blind_backfills: 回填留痕，kind ∈ accepted / conflict / adjudicated。
+--   同码同值重试不新增行；异值登记 conflict 待负责人裁定。
+-- 写路径（backfill/adjudicate/unblind）均对 blind_orders 行 SELECT ... FOR UPDATE，
+-- 并发回填与揭盲串行化，揭盲读取事务内完整结果；揭盲失败回滚，单据保持封存。

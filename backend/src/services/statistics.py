@@ -17,3 +17,9 @@ def diagnose(rows):
         groups[line]={'n':len(group),'mean':round(statistics.mean(group),4),'min':min(group),'max':max(group)}
     out=[x for x in rows if x['flour_yield']<low or x['flour_yield']>high]
     return dict(n=len(vals),mean=round(statistics.mean(vals),4),std=round(statistics.stdev(vals),4),min=min(vals),max=max(vals),q1=q1,median=median,q3=q3,iqr=iqr,lower=low,upper=high,outliers=out,histogram=[{'from':a,'to':b,'count':n} for a,b,n in zip(edges,edges[1:],counts)],groups=groups,checksum=hashlib.sha256(json.dumps(rows,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),method='线性插值分位数；异常值严格落在 Q1−1.5×IQR / Q3+1.5×IQR 外；所有有效样本均纳入，不删除异常点。')
+def blind_stats(pairs,tolerance):
+    if len(pairs)<2: raise ValueError('至少需要 2 对盲样才能揭盲')
+    paired=[{**p,'diff':round(p['retest_yield']-p['original_yield'],4)} for p in pairs]
+    diffs=[p['diff'] for p in paired]
+    over=[p for p in paired if abs(p['diff'])>tolerance]
+    return dict(n=len(diffs),mean=round(statistics.mean(diffs),4),std=round(statistics.stdev(diffs),4),tolerance=tolerance,pairs=paired,over=over,checksum=hashlib.sha256(json.dumps(paired,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),method='复测减原测配对差值；均值与样本标准差（n−1）；|差值| 严格大于限差判定超差，边界保留；限差于送检时冻结，揭盲后不可改。')

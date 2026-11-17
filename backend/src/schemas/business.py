@@ -26,3 +26,16 @@ class ReviewInput(BaseModel):
     line:Literal["全部","一线","二线","三线"]="全部"
 class ApprovalInput(BaseModel):
     note:str=Field(min_length=5,max_length=1500)
+class BlindItemInput(BaseModel):
+    inspection_id:int=Field(gt=0)
+    external_email:str=Field(min_length=3,max_length=100)
+class BlindOrderInput(BaseModel):
+    title:str=Field(min_length=2,max_length=120)
+    tolerance:float=Field(gt=0,le=10,allow_inf_nan=False)
+    items:list[BlindItemInput]=Field(min_length=2,max_length=40)
+class BackfillInput(BaseModel):
+    anon_code:str=Field(min_length=3,max_length=20,pattern=r"^[A-Za-z0-9_-]+$")
+    flour_yield:float=Field(gt=0,le=100,allow_inf_nan=False)
+class AdjudicateInput(BaseModel):
+    item_id:int=Field(gt=0)
+    flour_yield:float=Field(gt=0,le=100,allow_inf_nan=False)
